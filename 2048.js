@@ -119,6 +119,7 @@ function getPipes() {
     pipes.transpose = pipes.expand.concat(transposeStage, pipes.compress);
 
     pipes.merge = {};
+
     pipes.merge.right = [
         {"$unwind": "$grid"},
         {"$lookup": {"from": "rows", "localField": "grid", "foreignField": "_id", "as": "row"}},
@@ -126,11 +127,19 @@ function getPipes() {
           "$group": {
               "_id": "$_id",
               "grid": {"$push": {"$arrayElemAt": ["$row.right.row", 0]}},
+              "oldgrid": {"$push": "$grid"},
               "score": {"$sum": {"$arrayElemAt": ["$row.right.score", 0]}},
               "oldScore": {"$first": "$score"}
           }
         },
-        {"$project": {"grid": 1, "score": {"$add": ["$score", "$oldScore"]}}}
+        {
+          "$project": {
+              "grid": 1,
+              changed: {$ne: ["$grid", "$oldgrid"]}, "score": {"$add": ["$score", "$oldScore"]}
+          }
+        },
+        {"$match": {changed: true}},
+        {"$project": {change: 0}},
     ];
 
     pipes.merge.left = [
@@ -140,11 +149,19 @@ function getPipes() {
           "$group": {
               "_id": "$_id",
               "grid": {"$push": {"$arrayElemAt": ["$row.left.row", 0]}},
+              "oldgrid": {"$push": "$grid"},
               "score": {"$sum": {"$arrayElemAt": ["$row.left.score", 0]}},
               "oldScore": {"$first": "$score"}
           }
         },
-        {"$project": {"grid": 1, "score": {"$add": ["$score", "$oldScore"]}}}
+        {
+          "$project": {
+              "grid": 1,
+              changed: {$ne: ["$grid", "$oldgrid"]}, "score": {"$add": ["$score", "$oldScore"]}
+          }
+        },
+        {"$match": {changed: true}},
+        {"$project": {change: 0}},
     ];
 
     pipes.merge.down = pipes.transpose.concat(pipes.merge.left, pipes.transpose);
@@ -173,6 +190,12 @@ function getPipes() {
         }
     ];
     return pipes;
+}
+
+function m2048() {
+    let pipes = getPipes();
+    db.nexttest.drop();
+    db.createView("nexttest", "game", pipes.nextMove);
 }
 
 function status(funs) {
